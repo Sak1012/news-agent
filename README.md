@@ -21,6 +21,8 @@ Configure environment variables as needed:
 - `NEWSAPI_KEY` – API key for NewsAPI.
 - `NEWS_AGENT_DEFAULT_LIMIT` – default number of articles to return (default `10`).
 - `NEWS_AGENT_ALLOWED_DOMAINS` – comma-separated whitelist of domains.
+- `NEWS_AGENT_MAX_PER_SOURCE` – maximum number of articles per source (defaults to `1`; set to `0` or negative to remove the cap).
+- `NEWS_AGENT_SEC_USER_AGENT` – required to enable SEC/EDGAR access; follow SEC guidelines (`Company Name Contact [email]`).
 
 ### Run the Flask API
 
@@ -70,7 +72,7 @@ The notebook mirrors all Python modules so you can tweak providers, summarizatio
 ## Directory Overview
 
 - `app.py` – Flask entrypoint.
-- `news_agent/` – Python package with config, providers, sentiment, summarizer, and agent orchestration.
+- `news_agent/` – Python package with config, providers (NewsAPI, Wired RSS, SEC 10-K), sentiment, summarizer, and agent orchestration.
 - `cmd/newscli/` – Go CLI.
 - `notebooks/news_agent_debug.ipynb` – interactive notebook.
 - `requirements.txt` – Python dependencies (Flask, requests, feedparser).

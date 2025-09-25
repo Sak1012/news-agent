@@ -9,6 +9,7 @@ from .config import AgentConfig
 from .models import NewsItem, RawArticle
 from .providers.base import BaseProvider, ProviderList
 from .providers.wired_rss_provider import WiredRSSProvider
+from .providers.sec_provider import SECFilingsProvider
 from .sentiment import score_sentiment
 from .summarizer import summarize
 
@@ -34,6 +35,11 @@ class NewsAgent:
         providers: ProviderList = []
         if getattr(self.config, "newsapi_key", None) and NewsAPIProvider is not None:
             providers.append(NewsAPIProvider(self.config.newsapi_key))
+        if getattr(self.config, "sec_user_agent", None):
+            try:
+                providers.append(SECFilingsProvider(self.config.sec_user_agent))
+            except ValueError as exc:
+                raise RuntimeError(f"SEC provider misconfigured: {exc}") from exc
         providers.append(WiredRSSProvider())
         return providers
 
@@ -43,6 +49,7 @@ class NewsAgent:
         limit = limit or self.config.default_limit
         seen_urls: set[str] = set()
         seen_titles: set[str] = set()
+        seen_sources: dict[str, int] = {}
         results: List[NewsItem] = []
         for provider in self.providers:
             for raw in provider.fetch(query=query, limit=limit, **kwargs):
@@ -55,10 +62,15 @@ class NewsAgent:
                 dedupe_key = self._dedupe_key(raw)
                 if dedupe_key and dedupe_key in seen_titles:
                     continue
+                source_key = self._source_key(raw)
+                if source_key and self._exceeds_source_limit(source_key, seen_sources):
+                    continue
                 item = self._process(raw)
                 results.append(item)
                 if dedupe_key:
                     seen_titles.add(dedupe_key)
+                if source_key:
+                    seen_sources[source_key] = seen_sources.get(source_key, 0) + 1
                 if len(results) >= limit:
                     return results
         return results
@@ -112,3 +124,20 @@ class NewsAgent:
             if normalized_excerpt:
                 return normalized_excerpt
         return None
+
+    def _source_key(self, article: RawArticle) -> Optional[str]:
+        source = (article.source or "").strip().lower()
+        if source:
+            normalized = re.sub(r"[^a-z0-9]+", "", source)
+            if normalized:
+                return normalized
+        if article.url:
+            parsed = urlparse(article.url)
+            if parsed.netloc:
+                return parsed.netloc.lower()
+        return None
+
+    def _exceeds_source_limit(self, source_key: str, seen_sources: dict[str, int]) -> bool:
+        if self.config.max_per_source is None:
+            return False
+        return seen_sources.get(source_key, 0) >= self.config.max_per_source
